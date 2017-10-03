@@ -2024,6 +2024,9 @@ void URuntimeMeshComponent::SerializeInternal(FArchive& Ar, bool bForceSaveAll)
 void URuntimeMeshComponent::SerializeRMC(FArchive& Ar)
 {
 	SerializeInternal(Ar, true);
+
+	if (Ar.IsLoading())
+		PostLoad();
 }
 
 void URuntimeMeshComponent::SerializeRMCSection(FArchive& Ar, int32 SectionIndex)
@@ -2111,13 +2114,6 @@ void URuntimeMeshComponent::SerializeRMCSection(FArchive& Ar, int32 SectionIndex
 		}
 	}
 }
-
-
-
-
-
-
-
 
 void URuntimeMeshComponent::PostLoad()
 {
