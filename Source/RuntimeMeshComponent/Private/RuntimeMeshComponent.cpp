@@ -92,22 +92,22 @@ public:
 		{
 			Sections.SetNum(SectionIndex + 1, false);
 		}
-		
+
 		// If a section already exists... destroy it!
 		if (FRuntimeMeshSectionProxyInterface* Section = Sections[SectionIndex])
-		{			
+		{
 			delete Section;
 		}
-		
+
 		// Get the proxy and finish the creation here on the render thread.
 		FRuntimeMeshSectionProxyInterface* Section = SectionData->NewProxy;
-		Section->FinishCreate_RenderThread(SectionData);		
+		Section->FinishCreate_RenderThread(SectionData);
 
 		// Save ref to new section
 		Sections[SectionIndex] = Section;
-		
+
 		delete SectionData;
-		
+
 		// Update material relevancy information needed to control the rendering.
 		UpdateMaterialRelevance();
 	}
@@ -168,7 +168,7 @@ public:
 			delete Sections[SectionIndex];
 			Sections[SectionIndex] = nullptr;
 		}
-		
+
 		// Update material relevancy information needed to control the rendering.
 		UpdateMaterialRelevance();
 	}
@@ -196,7 +196,7 @@ public:
 		for (auto& SectionToUpdate : BatchUpdateData->UpdateSections)
 		{
 			UpdateSection_RenderThread(SectionToUpdate);
-		}		
+		}
 
 		// Apply section property updates
 		for (auto& SectionToUpdate : BatchUpdateData->PropertyUpdateSections)
@@ -221,7 +221,7 @@ public:
 		return false;
 	}
 
-	bool HasStaticSections() const 
+	bool HasStaticSections() const
 	{
 		for (FRuntimeMeshSectionProxyInterface* Section : Sections)
 		{
@@ -246,7 +246,7 @@ public:
 		bool bForceDynamicPath = IsRichView(*View->Family) || View->Family->EngineShowFlags.Wireframe || IsSelected() || !IsStaticPathAvailable();
 		Result.bStaticRelevance = !bForceDynamicPath && HasStaticSections();
 		Result.bDynamicRelevance =  bForceDynamicPath || HasDynamicSections();
-		
+
 		Result.bRenderInMainPass = ShouldRenderInMainPass();
 #if ENGINE_MAJOR_VERSION == 4 && ENGINE_MINOR_VERSION >= 11
 		Result.bUsesLightingChannels = GetLightingChannelMask() != GetDefaultLightingChannelMask();
@@ -262,11 +262,11 @@ public:
 
 		MeshBatch.ReverseCulling = IsLocalToWorldDeterminantNegative();
 		MeshBatch.bCanApplyViewModeOverrides = true;
-		
+
 		FMeshBatchElement& BatchElement = MeshBatch.Elements[0];
 		BatchElement.PrimitiveUniformBufferResource = &GetUniformBuffer();
 	}
-	
+
 	virtual void DrawStaticElements(FStaticPrimitiveDrawInterface* PDI) override
 	{
 		SCOPE_CYCLE_COUNTER(STAT_RuntimeMesh_DrawStaticElements);
@@ -321,7 +321,7 @@ public:
 						}
 					}
 				}
-			}			
+			}
 		}
 
 		// Draw bounds
@@ -329,7 +329,7 @@ public:
 		for (int32 ViewIndex = 0; ViewIndex < Views.Num(); ViewIndex++)
 		{
 			if (VisibilityMap & (1 << ViewIndex))
-			{				
+			{
 #if ENGINE_MAJOR_VERSION == 4 && ENGINE_MINOR_VERSION >= 13
 				// Draw simple collision as wireframe if 'show collision', and collision is enabled, and we are not using the complex as the simple
 				if (ViewFamily.EngineShowFlags.Collision && IsCollisionEnabled() && BodySetup->GetCollisionTraceFlag() != ECollisionTraceFlag::CTF_UseComplexAsSimple)
@@ -349,7 +349,7 @@ public:
 
 	virtual bool CanBeOccluded() const override
 	{
-		return !MaterialRelevance.bDisableDepthTest;
+		return !MaterialRelevance.bDisableDepthTest && !ShouldRenderCustomDepth();
 	}
 
 	virtual uint32 GetMemoryFootprint(void) const
@@ -486,7 +486,7 @@ void URuntimeMeshComponent::CreateSectionInternal(int32 SectionIndex, ESectionUp
 		{
 			BatchState.MarkCollisionDirty();
 		}
-		
+
 		// Flag bounds update
 		BatchState.MarkBoundsDirty();
 
@@ -533,9 +533,9 @@ void URuntimeMeshComponent::UpdateSectionInternal(int32 SectionIndex, bool bHadV
 	// Ensure that something was updated
 	check(bHadVertexPositionsUpdate || bHadVertexUpdates || bHadIndexUpdates || bNeedsBoundsUpdate);
 
-	check(SectionIndex < MeshSections.Num() && MeshSections[SectionIndex].IsValid());	
+	check(SectionIndex < MeshSections.Num() && MeshSections[SectionIndex].IsValid());
 	RuntimeMeshSectionPtr Section = MeshSections[SectionIndex];
-	
+
 	// Update normal/tangents if requested...
 	if (!!(UpdateFlags & ESectionUpdateFlags::CalculateNormalTangent))
 	{
@@ -551,7 +551,7 @@ void URuntimeMeshComponent::UpdateSectionInternal(int32 SectionIndex, bool bHadV
 	/* Make sure this is only flagged if the section is dual buffer */
 	bHadVertexPositionsUpdate = Section->IsDualBufferSection() && bHadVertexPositionsUpdate;
 	bool bNeedsCollisionUpdate = Section->CollisionEnabled && (bHadVertexPositionsUpdate || (!Section->IsDualBufferSection() && bHadVertexUpdates));
-	
+
 	// Use the batch update if one is running
 	if (BatchState.IsBatchPending())
 	{
@@ -789,7 +789,7 @@ TArray<FVector>* URuntimeMeshComponent::BeginMeshSectionPositionUpdate(int32 Sec
 
 	// Get section
 	RuntimeMeshSectionPtr& Section = MeshSections[SectionIndex];
-	
+
 	return &Section->PositionVertexBuffer;
 }
 
@@ -797,7 +797,7 @@ void URuntimeMeshComponent::EndMeshSectionPositionUpdate(int32 SectionIndex)
 {
 	// Validate all update parameters
 	RMC_VALIDATE_UPDATEPARAMETERS_DUALBUFFER(SectionIndex, /*VoidReturn*/);
-	
+
 	// TODO: Validate that the position buffer is still the same length
 
 	UpdateSectionVertexPositionsInternal(SectionIndex, true);
@@ -809,13 +809,13 @@ void URuntimeMeshComponent::EndMeshSectionPositionUpdate(int32 SectionIndex, con
 	RMC_VALIDATE_UPDATEPARAMETERS_DUALBUFFER(SectionIndex, /*VoidReturn*/);
 
 	RuntimeMeshSectionPtr& Section = MeshSections[SectionIndex];
-	
+
 	bool bNeedsBoundingBoxUpdate = !(Section->LocalBoundingBox == BoundingBox);
 	if (bNeedsBoundingBoxUpdate)
 	{
 		Section->LocalBoundingBox = BoundingBox;
 	}
-	
+
 	// TODO: Validate that the position buffer is still the same length
 
 	UpdateSectionVertexPositionsInternal(SectionIndex, bNeedsBoundingBoxUpdate);
@@ -840,9 +840,9 @@ void URuntimeMeshComponent::EndMeshSectionUpdate(int32 SectionIndex, ERuntimeMes
 	Section->RecalculateBoundingBox();
 
 	// Finalize section update
-	UpdateSectionInternal(SectionIndex, 
-		!!(UpdatedBuffers & ERuntimeMeshBuffer::Positions), 
-		!!(UpdatedBuffers & ERuntimeMeshBuffer::Vertices), 
+	UpdateSectionInternal(SectionIndex,
+		!!(UpdatedBuffers & ERuntimeMeshBuffer::Positions),
+		!!(UpdatedBuffers & ERuntimeMeshBuffer::Vertices),
 		!!(UpdatedBuffers & ERuntimeMeshBuffer::Triangles), true, UpdateFlags);
 }
 
@@ -872,7 +872,7 @@ void URuntimeMeshComponent::EndMeshSectionUpdate(int32 SectionIndex, ERuntimeMes
 
 
 void URuntimeMeshComponent::CreateMeshSection(int32 SectionIndex, const TArray<FVector>& Vertices, const TArray<int32>& Triangles, const TArray<FVector>& Normals,
-	const TArray<FVector2D>& UV0, const TArray<FColor>& Colors, const TArray<FRuntimeMeshTangent>& Tangents, bool bCreateCollision,	EUpdateFrequency UpdateFrequency, 
+	const TArray<FVector2D>& UV0, const TArray<FColor>& Colors, const TArray<FRuntimeMeshTangent>& Tangents, bool bCreateCollision,	EUpdateFrequency UpdateFrequency,
 	ESectionUpdateFlags UpdateFlags)
 {
 	SCOPE_CYCLE_COUNTER(STAT_RuntimeMesh_CreateMeshSection);
@@ -950,7 +950,7 @@ void URuntimeMeshComponent::UpdateMeshSection(int32 SectionIndex, const TArray<F
 
 	// Get section
 	RuntimeMeshSectionPtr& Section = MeshSections[SectionIndex];
-	
+
 	// Tell the section to update the vertex buffer
 	bool bHadVertexUpdates = Section->UpdateVertexBufferInternal(Vertices, Normals, Tangents, UV0, TArray<FVector2D>(), Colors);
 
@@ -978,7 +978,7 @@ void URuntimeMeshComponent::UpdateMeshSection(int32 SectionIndex, const TArray<F
 
 	// Get section
 	RuntimeMeshSectionPtr& Section = MeshSections[SectionIndex];
-	
+
 	// Tell the section to update the vertex buffer
 	bool bHadVertexUpdates = Section->UpdateVertexBufferInternal(Vertices, Normals, Tangents, UV0, UV1, Colors);
 
@@ -996,7 +996,7 @@ void URuntimeMeshComponent::UpdateMeshSection(int32 SectionIndex, const TArray<F
 
 void URuntimeMeshComponent::CreateMeshSection_Blueprint(int32 SectionIndex, const TArray<FVector>& Vertices, const TArray<int32>& Triangles, const TArray<FVector>& Normals, const TArray<FRuntimeMeshTangent>& Tangents,
 	const TArray<FVector2D>& UV0, const TArray<FVector2D>& UV1, const TArray<FLinearColor>& VertexColors, bool bCreateCollision, bool bCalculateNormalTangent, bool bGenerateTessellationTriangles, EUpdateFrequency UpdateFrequency)
-{	
+{
 	// Convert vertex colors to FColor
 	TArray<FColor> Colors;
 	ConvertLinearColorToFColor(VertexColors, Colors);
@@ -1048,7 +1048,7 @@ void URuntimeMeshComponent::CreateMeshSection(int32 SectionIndex, IRuntimeMeshVe
 	// Set vertex/index buffers
 	Section->UpdateVertexBuffer(Vertices, nullptr, !!(UpdateFlags & ESectionUpdateFlags::MoveArrays));
 	Section->UpdateIndexBuffer(Triangles, !!(UpdateFlags & ESectionUpdateFlags::MoveArrays));
-	
+
 
 	// Track collision status and update collision information if necessary
 	Section->CollisionEnabled = bCreateCollision;
@@ -1059,7 +1059,7 @@ void URuntimeMeshComponent::CreateMeshSection(int32 SectionIndex, IRuntimeMeshVe
 }
 
 void URuntimeMeshComponent::UpdateMeshSection(int32 SectionIndex, IRuntimeMeshVerticesBuilder& Vertices, FRuntimeMeshIndicesBuilder& Triangles, ESectionUpdateFlags UpdateFlags)
-{	
+{
 	// Validate all update parameters
 	RMC_VALIDATE_UPDATEPARAMETERS_INTERNALSECTION(SectionIndex, /*VoidReturn*/);
 
@@ -1087,7 +1087,7 @@ void URuntimeMeshComponent::ClearMeshSection(int32 SectionIndex)
 
 		// Clear the section
 		MeshSections[SectionIndex].Reset();
-		
+
 		// Use the batch update if one is running
 		if (BatchState.IsBatchPending())
 		{
@@ -1102,14 +1102,14 @@ void URuntimeMeshComponent::ClearMeshSection(int32 SectionIndex)
 
 			// Flag bounds update
 			BatchState.MarkBoundsDirty();
-			
+
 			// bail since we don't update directly in this case.
 			return;
 		}
 
 
 		if (SceneProxy && !bWasStaticSection)
-		{			
+		{
 			// Enqueue update on RT
 			ENQUEUE_UNIQUE_RENDER_COMMAND_TWOPARAMETER(
 				FRuntimeMeshSectionUpdate,
@@ -1130,7 +1130,7 @@ void URuntimeMeshComponent::ClearMeshSection(int32 SectionIndex)
 		{
 			MarkCollisionDirty();
 		}
-		
+
 		UpdateLocalBounds();
 
  	}
@@ -1155,7 +1155,7 @@ void URuntimeMeshComponent::ClearAllMeshSections()
 		// bail since we don't update directly in this case.
 		return;
 	}
-	
+
  	MarkRenderStateDirty();
 	MarkCollisionDirty();
 	UpdateLocalBounds();
@@ -1165,7 +1165,7 @@ void URuntimeMeshComponent::SetSectionTessellationTriangles(int32 SectionIndex, 
 {
 	// Validate all update parameters
 	RMC_VALIDATE_UPDATEPARAMETERS_INTERNALSECTION(SectionIndex, /*VoidReturn*/);
-	
+
 	// Get section
 	RuntimeMeshSectionPtr& Section = MeshSections[SectionIndex];
 
@@ -1230,7 +1230,7 @@ void URuntimeMeshComponent::SetMeshSectionCollisionEnabled(int32 SectionIndex, b
 		if (Section->CollisionEnabled != bNewCollisionEnabled)
 		{
 			Section->CollisionEnabled = bNewCollisionEnabled;
-			
+
 			// Use the batch update if one is running
 			if (BatchState.IsBatchPending())
 			{
@@ -1372,7 +1372,7 @@ void URuntimeMeshComponent::AddCollisionConvexMesh(TArray<FVector> ConvexVerts)
 		ConvexSection.VertexBuffer = ConvexVerts;
 		ConvexSection.BoundingBox = FBox(ConvexVerts);
 		ConvexCollisionSections.Add(ConvexSection);
-		
+
 
 		// Use the batch update if one is running
 		if (BatchState.IsBatchPending())
@@ -1439,7 +1439,7 @@ void URuntimeMeshComponent::SetCollisionConvexMeshes(const TArray< TArray<FVecto
 void URuntimeMeshComponent::UpdateLocalBounds(bool bMarkRenderTransform)
 {
 	SCOPE_CYCLE_COUNTER(STAT_RuntimeMesh_UpdateLocalBounds);
-	
+
 	FBox LocalBox(EForceInit::ForceInitToZero);
 
 	for (const RuntimeMeshSectionPtr& Section : MeshSections)
@@ -1514,7 +1514,7 @@ void URuntimeMeshComponent::EndBatchUpdates()
 			{
 				// Validate section exists
 				check(MeshSections.Num() >= Index && MeshSections[Index].IsValid());
-				
+
 				UMaterialInterface* Material = GetMaterial(Index);
 				if (Material == nullptr)
 				{
@@ -1627,7 +1627,7 @@ bool URuntimeMeshComponent::GetPhysicsTriMeshData(struct FTriMeshCollisionData* 
 {
 	SCOPE_CYCLE_COUNTER(STAT_RuntimeMesh_GetPhysicsTriMeshData);
  	int32 VertexBase = 0; // Base vertex index for current section
- 
+
 	bool HadCollision = false;
 
 #if ENGINE_MAJOR_VERSION == 4 && ENGINE_MINOR_VERSION >= 13
@@ -1641,7 +1641,7 @@ bool URuntimeMeshComponent::GetPhysicsTriMeshData(struct FTriMeshCollisionData* 
 
 	// For each section..
 	for (int32 SectionIdx = 0; SectionIdx < MeshSections.Num(); SectionIdx++)
-	{ 
+	{
 		const RuntimeMeshSectionPtr& Section = MeshSections[SectionIdx];
 
 		if (Section.IsValid() && Section->CollisionEnabled)
@@ -1698,7 +1698,7 @@ bool URuntimeMeshComponent::GetPhysicsTriMeshData(struct FTriMeshCollisionData* 
 			HadCollision = true;
 		}
 	}
- 
+
  	CollisionData->bFlipNormals = true;
 
 #if ENGINE_MAJOR_VERSION == 4 && ENGINE_MINOR_VERSION >= 14
@@ -1707,7 +1707,7 @@ bool URuntimeMeshComponent::GetPhysicsTriMeshData(struct FTriMeshCollisionData* 
 		CollisionData->bFlipNormals = true;
 	}
 #endif
- 
+
  	return HadCollision;
  }
 
@@ -1728,7 +1728,7 @@ bool URuntimeMeshComponent::GetPhysicsTriMeshData(struct FTriMeshCollisionData* 
 			return true;
 		}
 	}
- 
+
  	return false;
  }
 
@@ -1769,7 +1769,7 @@ void URuntimeMeshComponent::UpdateCollision()
 
 		NewConvexElem.VertexData = ConvexCollisionSections[Index].VertexBuffer;
 		NewConvexElem.ElemBox = FBox(NewConvexElem.VertexData);
-	} 
+	}
 
 	// Set trace flag
 	BodySetup->CollisionTraceFlag = bUseComplexAsSimpleCollision ? CTF_UseComplexAsSimple : CTF_UseDefault;
@@ -1960,11 +1960,11 @@ void URuntimeMeshComponent::SerializeLegacy(FArchive& Ar)
 }
 
 void URuntimeMeshComponent::Serialize(FArchive& Ar)
-{	
+{
 	Super::Serialize(Ar);
 
 	SerializeInternal(Ar);
-}	
+}
 
 void URuntimeMeshComponent::SerializeInternal(FArchive& Ar, bool bForceSaveAll)
 {
@@ -2081,7 +2081,7 @@ void URuntimeMeshComponent::SerializeRMCSection(FArchive& Ar, int32 SectionIndex
 		}
 	}
 
-	// Now we save the section data to a separate archive and then write in into the main. 
+	// Now we save the section data to a separate archive and then write in into the main.
 	// This way we can recover from unknown types or mismatch sizes
 
 
